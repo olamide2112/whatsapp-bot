@@ -1,0 +1,6 @@
+node_modules/
+auth/
+.env
+
+git config --global user.name "Oladokun Olamide"
+git config --global user.email "oladokunolamide009@gmail.com"
