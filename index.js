@@ -10,28 +10,34 @@ const qrcode = require("qrcode-terminal");
 const axios = require("axios");
 
 async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState("auth");
+  const { state, saveCreds } = await useMultiFileAuthState("auth_info"); // updated
   const { version } = await fetchLatestBaileysVersion();
+
   const sock = makeWASocket({
     version,
     auth: state,
     browser: ["Ubuntu", "Chrome", "22.04.4"],
+    printQRInTerminal: true, // QR auto-prints in terminal
   });
 
-  // Save credentials
+  // Save session credentials
   sock.ev.on("creds.update", saveCreds);
 
-  // Connection update + QR code display
+  // Handle connection status
   sock.ev.on("connection.update", (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      qrcode.generate(qr, { small: true });
+      const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+        qr
+      )}`;
+      console.log("🔗 Scan the QR code using this link: ", qrImageUrl);
     }
 
     if (connection === "close") {
       const shouldReconnect =
-        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+        lastDisconnect?.error?.output?.statusCode !==
+        DisconnectReason.loggedOut;
       console.log(
         "Connection closed due to",
         lastDisconnect?.error,
@@ -44,7 +50,7 @@ async function startBot() {
     }
   });
 
-  // Welcome new members
+  // Welcome message for new group members
   sock.ev.on("group-participants.update", async (update) => {
     if (update.action === "add") {
       for (let participant of update.participants) {
@@ -57,7 +63,7 @@ async function startBot() {
     }
   });
 
-  // Listen to messages
+  // Handle messages
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
     const msg = messages[0];
@@ -108,16 +114,25 @@ async function startBot() {
       const url = text.split(" ")[1];
       if (!url) return;
       try {
-        const res = await axios.get(`https://api.snaptik.link/api/tiktok?url=${encodeURIComponent(url)}`);
+        const res = await axios.get(
+          `https://api.snaptik.link/api/tiktok?url=${encodeURIComponent(url)}`
+        );
         if (res.data && res.data.status === "ok" && res.data.data?.video?.url) {
           const fileUrl = res.data.data.video.url;
-          await sock.sendMessage(groupId, { video: { url: fileUrl }, caption: "📥 Downloaded media:" });
+          await sock.sendMessage(groupId, {
+            video: { url: fileUrl },
+            caption: "📥 Downloaded media:",
+          });
         } else {
-          await sock.sendMessage(groupId, { text: "❌ Failed to download media." });
+          await sock.sendMessage(groupId, {
+            text: "❌ Failed to download media.",
+          });
         }
       } catch (err) {
         console.error("Download error:", err.message);
-        await sock.sendMessage(groupId, { text: "❌ Error downloading media." });
+        await sock.sendMessage(groupId, {
+          text: "❌ Error downloading media.",
+        });
       }
     } else if (text.startsWith("!remove ")) {
       const groupMetadata = await sock.groupMetadata(groupId);
@@ -126,7 +141,7 @@ async function startBot() {
       );
       if (!isAdmin) {
         await sock.sendMessage(groupId, {
-          text: "🚫 Only admins can use this command."
+          text: "🚫 Only admins can use this command.",
         });
         return;
       }
